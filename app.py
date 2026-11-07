@@ -39,7 +39,7 @@ def require_auth():
     # 只有后台 API/页面需要登录；/sub 和 /api/nodes 对外
     if request.path.startswith("/admin"):
         auth = request.authorization
-        if not auth or not check_auth(auth.username, auth.pw):
+        if not auth or not check_auth(auth.username, auth.password):
             return Response(
                 "Authentication required",
                 401,
