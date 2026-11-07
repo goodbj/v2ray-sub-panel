@@ -74,18 +74,29 @@ def _init():
                 "INSERT INTO settings(key,value) VALUES('schema_version',?)",
                 (str(SCHEMA_VERSION),),
             )
-            # 默认管理密码：优先读环境变量 ADMIN_PASS（固定不重置），否则随机生成
-            env_pass = os.getenv("ADMIN_PASS")
-            if env_pass:
-                c.execute(
-                    "INSERT INTO settings(key,value) VALUES('admin_pass',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                    (env_pass,),
-                )
-            elif not c.execute("SELECT value FROM settings WHERE key='admin_pass'").fetchone():
+            # 首次：没设 ADMIN_PASS 才随机生成
+            if not os.getenv("ADMIN_PASS") and not c.execute(
+                "SELECT value FROM settings WHERE key='admin_pass'"
+            ).fetchone():
                 c.execute(
                     "INSERT INTO settings(key,value) VALUES('admin_pass',?)",
                     (secrets.token_hex(8),),
                 )
+            # 首次空库：自动种入默认公开订阅源（无卷场景兜底，启动即抓）
+            if not c.execute("SELECT COUNT(*) FROM sources").fetchone()[0]:
+                for u in DEFAULT_SOURCES:
+                    c.execute(
+                        "INSERT INTO sources(url,remark,created_at) VALUES(?,?,?)",
+                        (u, "默认公开源", _now()),
+                    )
+    # ADMIN_PASS 每次启动都覆盖：设了 env 就以 env 为准，不设才用库里的值
+    env_pass = os.getenv("ADMIN_PASS")
+    if env_pass:
+        with _conn() as c:
+            c.execute(
+                "INSERT INTO settings(key,value) VALUES('admin_pass',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (env_pass,),
+            )
             # 首次空库：自动种入默认公开订阅源（无卷场景兜底，启动即抓）
             if not c.execute("SELECT COUNT(*) FROM sources").fetchone()[0]:
                 for u in DEFAULT_SOURCES:
