@@ -182,6 +182,11 @@ def start_background():
 
 
 if __name__ == "__main__":
+    # 启动即抓一次（无卷场景兜底：新部署马上就有节点，不干等30分钟）
+    try:
+        run_fetch_all()
+    except Exception:
+        pass
     if os.getenv("AUTO_FETCH", "1") == "1":
         start_background()
     port = int(os.getenv("PORT", "8000"))

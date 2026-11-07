@@ -16,6 +16,15 @@ DATA_DIR = os.getenv("DATA_DIR", "/data")
 DB_PATH = os.path.join(DATA_DIR, "panel.db")
 SCHEMA_VERSION = 1
 
+# 首次空库自动种入的默认公开订阅源（纯文本节点列表 / base64 订阅链接）。
+# 这些源长期活跃，但稳定性不保证；可在后台随时增删。
+DEFAULT_SOURCES = [
+    "https://raw.githubusercontent.com/V2RayRoot/V2RayConfig/main/Config/vless.txt",
+    "https://raw.githubusercontent.com/V2RayRoot/V2RayConfig/main/Config/vmess.txt",
+    "https://raw.githubusercontent.com/V2RayRoot/V2RayConfig/main/Config/shadowsocks.txt",
+    "https://raw.githubusercontent.com/morpheusadam/v2ray-config/main/subscriptions/all_configs_base64.txt",
+]
+
 
 def _init():
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -65,12 +74,25 @@ def _init():
                 "INSERT INTO settings(key,value) VALUES('schema_version',?)",
                 (str(SCHEMA_VERSION),),
             )
-            # 默认管理密码
-            if not c.execute("SELECT value FROM settings WHERE key='admin_pass'").fetchone():
+            # 默认管理密码：优先读环境变量 ADMIN_PASS（固定不重置），否则随机生成
+            env_pass = os.getenv("ADMIN_PASS")
+            if env_pass:
+                c.execute(
+                    "INSERT INTO settings(key,value) VALUES('admin_pass',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (env_pass,),
+                )
+            elif not c.execute("SELECT value FROM settings WHERE key='admin_pass'").fetchone():
                 c.execute(
                     "INSERT INTO settings(key,value) VALUES('admin_pass',?)",
                     (secrets.token_hex(8),),
                 )
+            # 首次空库：自动种入默认公开订阅源（无卷场景兜底，启动即抓）
+            if not c.execute("SELECT COUNT(*) FROM sources").fetchone()[0]:
+                for u in DEFAULT_SOURCES:
+                    c.execute(
+                        "INSERT INTO sources(url,remark,created_at) VALUES(?,?,?)",
+                        (u, "默认公开源", _now()),
+                    )
 
 
 @contextmanager
